@@ -1,14 +1,13 @@
 package dev.lytix.lox;
 
+import java.util.List;
+
 abstract class Expr {
-
-    abstract <T> T accept(Visitor<T> visitor);
-
-    interface Visitor<T> {
-        T visitBinaryExpr(Binary expr);
-        T visitGroupingExpr(Grouping expr);
-        T visitLiteralExpr(Literal expr);
-        T visitUnaryExpr(Unary expr);
+    interface Visitor<R> {
+        R visitBinaryExpr(Binary expr);
+        R visitGroupingExpr(Grouping expr);
+        R visitLiteralExpr(Literal expr);
+        R visitUnaryExpr(Unary expr);
     }
 
     static class Binary extends Expr {
@@ -16,14 +15,14 @@ abstract class Expr {
         final Token operator;
         final Expr right;
 
-        Binary(Expr left, Token Operator, Expr right) {
+        Binary(Expr left, Token operator, Expr right) {
             this.left = left;
-            this.operator = Operator;
+            this.operator = operator;
             this.right = right;
         }
 
         @Override
-        <T> T accept(Visitor<T> visitor) {
+        <R> R accept(Visitor<R> visitor) {
             return visitor.visitBinaryExpr(this);
         }
     }
@@ -36,7 +35,7 @@ abstract class Expr {
         }
 
         @Override
-        <T> T accept(Visitor<T> visitor) {
+        <R> R accept(Visitor<R> visitor) {
             return visitor.visitGroupingExpr(this);
         }
     }
@@ -49,7 +48,7 @@ abstract class Expr {
         }
 
         @Override
-        <T> T accept(Visitor<T> visitor) {
+        <R> R accept(Visitor<R> visitor) {
             return visitor.visitLiteralExpr(this);
         }
     }
@@ -64,8 +63,10 @@ abstract class Expr {
         }
 
         @Override
-        <T> T accept(Visitor<T> visitor) {
+        <R> R accept(Visitor<R> visitor) {
             return visitor.visitUnaryExpr(this);
         }
     }
+
+    abstract <R> R accept(Visitor<R> visitor);
 }

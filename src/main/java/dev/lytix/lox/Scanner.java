@@ -106,7 +106,7 @@ public class Scanner {
 
         String keywordText = source.substring(start, current);
         TokenType type = keywords.get(keywordText);
-        /* if not a reserved keyword, it is a user-defined identifer */
+        /* if not a reserved keyword, it is a user-defined identifier */
         if (type == null) type = IDENTIFIER;
         addToken(type);
     }
