@@ -10,23 +10,33 @@ import static dev.lytix.lox.TokenType.*;
  *
  * complete context-free expression grammar:
  *
- * program      -> statement* EOF ;
+ * program      -> declaration* EOF ;
+ *
+ * declaration  -> varDecl
+ *              | statement ;
  *
  * statement    -> exprStmt
  *              |  printStmt ;
  *
+ * varDecl      -> "var" IDENTIFIER ( "=" expression )? ";" ;
+ *
  * exprStmt     -> expression ";" ;
  * printStmt    -> "print" expression ";" ;
  *
- * expression   -> equality ;
+ * expression   -> assignment ;
+ * assignment   -> IDENTIFIER "=" assignment
+ *              |  equality ;
  * equality     -> comparison ( ( "!=" | "==" ) comparison )* ;
  * comparison   -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
  * term         -> factor ( ( "-" | "+" ) factor )* ;
  * factor       -> unary ( ( "/" | "*" ) unary )* ;
  * unary        -> ( "!" | "-") unary
  *              |  primary;
- * primary      -> NUMBER | STRING | "true" | "false" | "nil"
- *              |  "(" expression ")" ;
+ * primary      -> "true" | "false" | "nil"
+ *              |  NUMBER | STRING
+ *              |  "(" expression ")"
+ *              |  IDENTIFIER ;
+ *
  */
 public class Parser {
     private static class ParseError extends RuntimeException {}
@@ -41,9 +51,19 @@ public class Parser {
     List<Stmt> parse() {
         List<Stmt> statements = new ArrayList<>();
         while (!isAtEnd())
-            statements.add(statement());
+            statements.add(declaration());
 
         return statements;
+    }
+
+    private Stmt declaration() {
+        try {
+            if (match(VAR)) return varDeclaration();
+            return statement();
+        } catch (ParseError error) {
+            synchronize();
+            return null;
+        }
     }
 
     private Stmt statement() {
@@ -54,6 +74,20 @@ public class Parser {
         if (match(PRINT)) return printStatement();
 
         return expressionStatement();
+    }
+
+    private Stmt varDeclaration() {
+        /*
+         * varDecl      -> "var" IDENTIFIER ( "=" expression )? ";" ;
+         */
+        Token name = consume(IDENTIFIER, "Expect variable name.");
+
+        Expr initializer = null;
+        if (match(EQUAL))
+            initializer = expression();
+
+        consume(SEMICOLON, "Expected ';' after variable declaration.");
+        return new Stmt.Var(name, initializer);
     }
 
     private Stmt expressionStatement() {
@@ -75,8 +109,28 @@ public class Parser {
     }
 
     private Expr expression() {
-        /* expression   -> equality ; */
-        return equality();
+        /* expression   -> assignment ; */
+        return assignment();
+    }
+
+    private Expr assignment() {
+        Expr expr = equality();
+
+        /*
+         * every assignment target can be valid syntax for normal expression.
+         * parse left-hand side of assignment as if it were an expression.
+         */
+        if (match(EQUAL)) {
+            Token equals = previous();
+            Expr value = assignment();
+            if (expr instanceof Expr.Variable) {
+                Token name = ((Expr.Variable)expr).name;
+                return new Expr.Assign(name, value);
+            }
+            error(equals, "Invalid assignment target.");
+        }
+
+        return expr;
     }
 
     private Expr equality() {
@@ -147,10 +201,16 @@ public class Parser {
     }
 
     private Expr primary() {
-        /* primary      -> NUMBER | STRING | "true" | "false" | "nil"
-                        |  "(" expression ")" ; */
+        /*
+         * primary      -> "true" | "false" | "nil"
+         *              |  NUMBER | STRING
+         *              |  "(" expression ")"
+         *              |  IDENTIFIER ;
+         */
         if (match(NUMBER, STRING))
             return new Expr.Literal(previous().literal);
+
+        if (match(IDENTIFIER)) return new Expr.Variable(previous());
 
         if (match(FALSE)) return new Expr.Literal(false);
         if (match(TRUE)) return new Expr.Literal(true);
