@@ -6,6 +6,11 @@ import static dev.lytix.lox.TokenType.*;
 
 public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     private Environment environment = new Environment();
+    boolean REPL = false;
+
+    public Interpreter(boolean REPL) {
+        this.REPL = REPL;
+    }
 
     void interpret(List<Stmt> statements) {
         try {
@@ -91,7 +96,9 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visitExpressionStmt(Stmt.Expression stmt) {
-        evaluate(stmt.expression);
+        Object res = evaluate(stmt.expression);
+        if (REPL)
+            System.out.println(stringify(res));
         /* java stupid */
         return null;
     }
