@@ -17,6 +17,9 @@ import static dev.lytix.lox.TokenType.*;
  *
  * statement    -> exprStmt
  *              |  printStmt ;
+ *              |  block
+ *
+ * block        -> "{" declaration* "}" ;
  *
  * varDecl      -> "var" IDENTIFIER ( "=" expression )? ";" ;
  *
@@ -70,10 +73,24 @@ public class Parser {
         /*
          * statement    -> exprStmt
          *              |  printStmt ;
+         *              |  block
          */
         if (match(PRINT)) return printStatement();
 
+        if (match(LEFT_BRACE)) return new Stmt.Block(block());
+
         return expressionStatement();
+    }
+
+    private List<Stmt> block() {
+        /* block        -> "{" declaration* "}" ; */
+        List<Stmt> statements = new ArrayList<>();
+
+        while (!check(RIGHT_BRACE) && !isAtEnd())
+            statements.add(declaration());
+
+        consume(RIGHT_BRACE, "Expected '}' after block.");
+        return statements;
     }
 
     private Stmt varDeclaration() {
