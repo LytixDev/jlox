@@ -13,6 +13,7 @@ import static dev.lytix.lox.TokenType.*;
  * program      -> declaration* EOF ;
  *
  * declaration  -> varDecl
+ *              -> varGoDecl
  *              | statement ;
  *
  * statement    -> exprStmt
@@ -22,6 +23,7 @@ import static dev.lytix.lox.TokenType.*;
  * block        -> "{" declaration* "}" ;
  *
  * varDecl      -> "var" IDENTIFIER ( "=" expression )? ";" ;
+ * varGoDecl    -> IDENTIFIER ":=" expression ";" ;
  *
  * exprStmt     -> expression ";" ;
  * printStmt    -> "print" expression ";" ;
@@ -61,7 +63,15 @@ public class Parser {
 
     private Stmt declaration() {
         try {
-            if (match(VAR)) return varDeclaration();
+            if (match(VAR))
+                return varDeclaration();
+
+            if (match(IDENTIFIER))
+                if (check(COLON_EQUAL))
+                    return varGoDeclaration();
+                else
+                    current--;
+
             return statement();
         } catch (ParseError error) {
             synchronize();
@@ -104,6 +114,18 @@ public class Parser {
             initializer = expression();
 
         consume(SEMICOLON, "Expected ';' after variable declaration.");
+        return new Stmt.Var(name, initializer);
+    }
+
+    private Stmt varGoDeclaration() {
+        /*
+         * varGoDecl    -> IDENTIFIER ":=" expression ";" ;
+         */
+        Token name = previous();
+        consume(COLON_EQUAL, "Internal error: saw ':=', but could not consume it.");
+
+        Expr initializer = expression();
+        consume(SEMICOLON, "Expected ';' after ':='.");
         return new Stmt.Var(name, initializer);
     }
 
@@ -305,5 +327,11 @@ public class Parser {
         }
     }
 
-
+    @Override
+    public String toString() {
+        return "Parser{" +
+                "tokens=" + tokens +
+                ", current=" + current +
+                '}';
+    }
 }
