@@ -129,7 +129,11 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Object visitVariableExpr(Expr.Variable expr) {
-        return environment.get(expr.name);
+        Object res = environment.get(expr.name);
+        if (res == null)
+            throw new RuntimeError(expr.name, "Attempting to access a variable that is not initialized");
+
+        return res;
     }
 
     @Override
