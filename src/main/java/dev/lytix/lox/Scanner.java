@@ -73,6 +73,12 @@ public class Scanner {
             case '=' -> addToken(match('=') ? EQUAL_EQUAL : EQUAL);
             case '<' -> addToken(match('=') ? LESS_EQUAL : LESS);
             case '>' -> addToken(match('=') ? GREATER_EQUAL : GREATER);
+            case ':' -> {
+                if (match('='))
+                    addToken(COLON_EQUAL);
+                else
+                    Lox.error(line, "Unexpected character: " + c + ".");
+            }
 
             case '/' -> {
                 /* ignore comments */

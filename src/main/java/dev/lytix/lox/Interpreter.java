@@ -6,6 +6,11 @@ import static dev.lytix.lox.TokenType.*;
 
 public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     private Environment environment = new Environment();
+    boolean REPL = false;
+
+    public Interpreter(boolean REPL) {
+        this.REPL = REPL;
+    }
 
     void interpret(List<Stmt> statements) {
         try {
@@ -22,6 +27,25 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     private void execute(Stmt stmt) {
         stmt.accept(this);
+    }
+
+    void executeBlock(List<Stmt> statements, Environment environment) {
+        Environment previous = this.environment;
+        try {
+            /* fresh env */
+            this.environment = environment;
+            for (Stmt statement : statements)
+                execute(statement);
+        } finally {
+            /* update env again */
+            this.environment = previous;
+        }
+    }
+
+    @Override
+    public Void visitBlockStmt(Stmt.Block stmt) {
+        executeBlock(stmt.statements, new Environment(environment));
+        return null;
     }
 
     @Override
@@ -72,7 +96,9 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visitExpressionStmt(Stmt.Expression stmt) {
-        evaluate(stmt.expression);
+        Object res = evaluate(stmt.expression);
+        if (REPL)
+            System.out.println(stringify(res));
         /* java stupid */
         return null;
     }
@@ -103,7 +129,11 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Object visitVariableExpr(Expr.Variable expr) {
-        return environment.get(expr.name);
+        Object res = environment.get(expr.name);
+        if (res == null)
+            throw new RuntimeError(expr.name, "Attempting to access a variable that is not initialized");
+
+        return res;
     }
 
     @Override

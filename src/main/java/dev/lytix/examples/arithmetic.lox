@@ -1,0 +1,7 @@
+var a = 3;
+var b = 10;
+var c;
+
+// expect c = 32
+c = 2 + a * b;
+print c;

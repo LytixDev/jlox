@@ -13,12 +13,17 @@ import static dev.lytix.lox.TokenType.*;
  * program      -> declaration* EOF ;
  *
  * declaration  -> varDecl
+ *              -> varGoDecl
  *              | statement ;
  *
  * statement    -> exprStmt
  *              |  printStmt ;
+ *              |  block
+ *
+ * block        -> "{" declaration* "}" ;
  *
  * varDecl      -> "var" IDENTIFIER ( "=" expression )? ";" ;
+ * varGoDecl    -> IDENTIFIER ":=" expression ";" ;
  *
  * exprStmt     -> expression ";" ;
  * printStmt    -> "print" expression ";" ;
@@ -58,7 +63,15 @@ public class Parser {
 
     private Stmt declaration() {
         try {
-            if (match(VAR)) return varDeclaration();
+            if (match(VAR))
+                return varDeclaration();
+
+            if (match(IDENTIFIER))
+                if (check(COLON_EQUAL))
+                    return varGoDeclaration();
+                else
+                    current--;
+
             return statement();
         } catch (ParseError error) {
             synchronize();
@@ -70,10 +83,24 @@ public class Parser {
         /*
          * statement    -> exprStmt
          *              |  printStmt ;
+         *              |  block
          */
         if (match(PRINT)) return printStatement();
 
+        if (match(LEFT_BRACE)) return new Stmt.Block(block());
+
         return expressionStatement();
+    }
+
+    private List<Stmt> block() {
+        /* block        -> "{" declaration* "}" ; */
+        List<Stmt> statements = new ArrayList<>();
+
+        while (!check(RIGHT_BRACE) && !isAtEnd())
+            statements.add(declaration());
+
+        consume(RIGHT_BRACE, "Expected '}' after block.");
+        return statements;
     }
 
     private Stmt varDeclaration() {
@@ -87,6 +114,18 @@ public class Parser {
             initializer = expression();
 
         consume(SEMICOLON, "Expected ';' after variable declaration.");
+        return new Stmt.Var(name, initializer);
+    }
+
+    private Stmt varGoDeclaration() {
+        /*
+         * varGoDecl    -> IDENTIFIER ":=" expression ";" ;
+         */
+        Token name = previous();
+        consume(COLON_EQUAL, "Internal error: saw ':=', but could not consume it.");
+
+        Expr initializer = expression();
+        consume(SEMICOLON, "Expected ';' after ':='.");
         return new Stmt.Var(name, initializer);
     }
 
@@ -288,5 +327,11 @@ public class Parser {
         }
     }
 
-
+    @Override
+    public String toString() {
+        return "Parser{" +
+                "tokens=" + tokens +
+                ", current=" + current +
+                '}';
+    }
 }
