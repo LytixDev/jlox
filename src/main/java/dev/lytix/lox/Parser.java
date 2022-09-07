@@ -17,8 +17,11 @@ import static dev.lytix.lox.TokenType.*;
  *              | statement ;
  *
  * statement    -> exprStmt
+ *              |  ifStmt
  *              |  printStmt ;
  *              |  block
+ *
+ * ifStmt       -> "if" "(" expression ")" statement ( "else" statement )? ;
  *
  * block        -> "{" declaration* "}" ;
  *
@@ -30,7 +33,12 @@ import static dev.lytix.lox.TokenType.*;
  *
  * expression   -> assignment ;
  * assignment   -> IDENTIFIER "=" assignment
- *              |  equality ;
+ *              |  equality
+ *              |  logic_or ;
+ *
+ * logic_or     -> logic_and ( "or" logic_and )* ;
+ * logic_and    -> equality ( "and" equality )* ;
+ *
  * equality     -> comparison ( ( "!=" | "==" ) comparison )* ;
  * comparison   -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
  * term         -> factor ( ( "-" | "+" ) factor )* ;
@@ -82,14 +90,30 @@ public class Parser {
     private Stmt statement() {
         /*
          * statement    -> exprStmt
-         *              |  printStmt ;
-         *              |  block
+         *              |  ifStmt
+         *              |  printStmt
+         *              |  block ;
          */
+        if (match(IF)) return ifStatement();
         if (match(PRINT)) return printStatement();
 
         if (match(LEFT_BRACE)) return new Stmt.Block(block());
 
         return expressionStatement();
+    }
+
+    private Stmt ifStatement() {
+        /* ifStmt       -> "if" "(" expression ")" statement ( "else" statement )? ; */
+        consume(LEFT_PAREN, "Expect '(' after 'if'.");
+        Expr condition = expression();
+        consume(RIGHT_PAREN, "Expect ')' after if condition.");
+
+        Stmt thenBranch = statement();
+        Stmt elseBranch = null;
+        if (match(ELSE))
+            elseBranch = statement();
+
+        return new Stmt.If(condition, thenBranch, elseBranch);
     }
 
     private List<Stmt> block() {
@@ -153,7 +177,11 @@ public class Parser {
     }
 
     private Expr assignment() {
-        Expr expr = equality();
+        /* assignment   -> IDENTIFIER "=" assignment
+         *              |  equality
+         *              |  logic_or ;
+         */
+        Expr expr = or();
 
         /*
          * every assignment target can be valid syntax for normal expression.
@@ -167,6 +195,32 @@ public class Parser {
                 return new Expr.Assign(name, value);
             }
             error(equals, "Invalid assignment target.");
+        }
+
+        return expr;
+    }
+
+    private Expr or() {
+        /* logic_or     -> logic_and ( "or" logic_and )* ; */
+        Expr expr = and();
+
+        while (match(OR)) {
+            Token operator = previous();
+            Expr right = and();
+            expr = new Expr.Logical(expr, operator, right);
+        }
+
+        return expr;
+    }
+
+    private Expr and() {
+        /* logic_and    -> equality ( "and" equality )* ; */
+        Expr expr = equality();
+
+        while (match(AND)) {
+            Token operator = previous();
+            Expr right = equality();
+            expr = new Expr.Logical(expr, operator, right);
         }
 
         return expr;
