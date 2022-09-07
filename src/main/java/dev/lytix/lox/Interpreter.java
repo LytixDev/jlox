@@ -104,6 +104,16 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     @Override
+    public Void visitIfStmt(Stmt.If stmt) {
+        Object condition = evaluate(stmt.condition);
+        if (isTruthy(condition))
+            stmt.thenBranch.accept(this);
+        else if (stmt.elseBranch != null)
+            stmt.elseBranch.accept(this);
+        return null;
+    }
+
+    @Override
     public Void visitPrintStmt(Stmt.Print stmt) {
         Object value = evaluate(stmt.expression);
         System.out.println(stringify(value));
@@ -130,8 +140,8 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     @Override
     public Object visitVariableExpr(Expr.Variable expr) {
         Object res = environment.get(expr.name);
-        if (res == null)
-            throw new RuntimeError(expr.name, "Attempting to access a variable that is not initialized");
+        //if (res == null)
+        //    throw new RuntimeError(expr.name, "Attempting to access a variable that is not initialized");
 
         return res;
     }
@@ -144,6 +154,32 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     @Override
     public Object visitLiteralExpr(Expr.Literal expr) {
         return expr.value;
+    }
+
+    /*
+     * returns the first operator with appropriate truthiness.
+     * TODO: could be interesting to return both?
+     *       that would allow syntax like:
+     *       print "hello " and "world!";
+     *       >>>hello world!;
+     *       Or maybe this is stupid as it would come with unexpected side effects
+     *       in most cases. Besides, the + operator can be used for joining to strings.
+     */
+    @Override
+    public Object visitLogicalExpr(Expr.Logical expr) {
+        Object left = evaluate(expr.left);
+
+        if (expr.operator.type == TokenType.OR) {
+            /* skip checking right side if left is truthy */
+            if (isTruthy(left))
+                return left;
+        } else {
+            /* skip checking right side of and if left already is false */
+            if (!isTruthy(left))
+                return left;
+        }
+
+        return evaluate(expr.right);
     }
 
     @Override
@@ -172,10 +208,12 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         throw new RuntimeError(operator, "Operands must be numbers.");
     }
 
-    /* 'false' and 'nil' are falsey, everything else is truthy */
+    /* 'false', 'nil', empty string '""' and '0' are falsey, everything else is truthy */
     private boolean isTruthy(Object object) {
         if (object == null) return false;
-        if (object instanceof Boolean) return (boolean) object;
+        if (object instanceof Boolean) return (boolean)object;
+        if (object instanceof Double) return (double)object != 0.0;
+        if (object instanceof String) return !((String)object).equals("");
         return true;
     }
 
