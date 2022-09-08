@@ -97,8 +97,8 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     @Override
     public Void visitExpressionStmt(Stmt.Expression stmt) {
         Object res = evaluate(stmt.expression);
-        if (REPL)
-            System.out.println(stringify(res));
+        //if (REPL)
+        //    System.out.println(stringify(res));
         /* java stupid */
         return null;
     }
@@ -117,6 +117,14 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     public Void visitPrintStmt(Stmt.Print stmt) {
         Object value = evaluate(stmt.expression);
         System.out.println(stringify(value));
+        return null;
+    }
+
+    @Override
+    public Void visitWhileStmt(Stmt.While stmt) {
+        while (isTruthy(evaluate(stmt.condition)))
+            execute(stmt.body);
+
         return null;
     }
 
