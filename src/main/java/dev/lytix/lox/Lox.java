@@ -80,8 +80,12 @@ public class Lox {
     }
 
     static void runtimeError(RuntimeError error) {
-        System.err.println(error.getMessage() +
-                "\n[Line " + error.token.line + "]");
+        if (error.token != null) {
+            System.err.println(error.getMessage() +
+                    "\n[Line " + error.token.line + "]");
+        } else {
+            System.err.println(error.getMessage() + "\n");
+        }
         hadRuntimeError = true;
     }
 

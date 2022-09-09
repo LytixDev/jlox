@@ -32,9 +32,14 @@ import static dev.lytix.lox.TokenType.*;
  *
  * block        -> "{" declaration* "}" ;
  *
- * declaration  -> varDecl
+ * declaration  -> funDecl
+ *              |  varDecl
  *              |  varGoDecl
  *              |  statement ;
+ *
+ * funDecl      -> "fun" function ;
+ * function     -> IDENTIFIER "(" parameters? ")" block ;
+ * parameters   -> IDENTIFIER ( "," IDENTIFIER )* ;
  *
  * varDecl      -> "var" IDENTIFIER ( "=" expression )? ";" ;
  * varGoDecl    -> IDENTIFIER ":=" expression ";" ;
@@ -55,7 +60,12 @@ import static dev.lytix.lox.TokenType.*;
  * term         -> factor ( ( "-" | "+" ) factor )* ;
  * factor       -> unary ( ( "/" | "*" ) unary )* ;
  * unary        -> ( "!" | "-") unary
- *              |  primary;
+ *              |  call;
+ *
+ * call         -> primary ( "(" arguments? ")" )* ;
+ * arguments    -> expression ( "," expression )* ;
+ *
+ *
  * primary      -> "true" | "false" | "nil"
  *              |  NUMBER | STRING
  *              |  "(" expression ")"
@@ -82,6 +92,9 @@ public class Parser {
 
     private Stmt declaration() {
         try {
+            if (match(FUN))
+                return function("function");
+
             if (match(VAR))
                 return varDeclaration();
 
@@ -195,6 +208,30 @@ public class Parser {
 
         consume(RIGHT_BRACE, "Expected '}' after block.");
         return statements;
+    }
+
+
+    private Stmt.Function function(String kind) {
+        /* function     -> IDENTIFIER "(" parameters? ")" block ; */
+        Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
+        consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
+        List<Token> parameters = new ArrayList<>();
+
+        /* handle zero parameter case */
+        if (!check(RIGHT_PAREN)) {
+            do {
+                if (parameters.size() >= 255)
+                    error(peek(), "Can't have more than 255 parameters.");
+
+                parameters.add(consume(IDENTIFIER, "Expect parameter name."));
+            } while (match(COMMA));
+        }
+        consume(RIGHT_PAREN, "Expect ')' after parameters.");
+
+        /* block() assumes the brace token has already been matched */
+        consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
+        List<Stmt> body = block();
+        return new Stmt.Function(name, parameters, body);
     }
 
     private Stmt varDeclaration() {
@@ -353,14 +390,48 @@ public class Parser {
 
     private Expr unary() {
         /* unary        -> ( "!" | "-") unary
-                        |  primary; */
+                        |  call; */
         if (match(BANG, MINUS)) {
             Token operator = previous();
             Expr right = unary();
             return new Expr.Unary(operator, right);
         }
 
-        return primary();
+        return call();
+    }
+
+    private Expr finishCall(Expr callee) {
+        List<Expr> arguments = new ArrayList<>();
+
+        /* function calls can have no argument, so only parse arguments when no right paren */
+        if (!check(RIGHT_PAREN)) {
+            do {
+                /* a function can't accept no more than 255 arguments */
+                if (arguments.size() > 255)
+                    /* do not throw error, keep parsing */
+                    error(peek(), "Can't have more than 255 arguments to a function.");
+
+                arguments.add(expression());
+            } while (match(COMMA));
+        }
+
+        Token paren = consume(RIGHT_PAREN, "Expect ')' after function arguments.");
+        return new Expr.Call(callee, paren, arguments);
+    }
+
+    private Expr call() {
+        /* call         -> primary ( "(" arguments? ")" )* ; */
+        Expr expr = primary();
+
+        while (true) {
+            if (match(LEFT_PAREN))
+                /* use previously parsed expression as callee, recursively */
+                expr = finishCall(expr);
+            else
+                break;
+        }
+
+        return expr;
     }
 
     private Expr primary() {
