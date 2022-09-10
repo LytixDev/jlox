@@ -1,15 +1,32 @@
 package dev.lytix.lox;
 
+import dev.lytix.lox.exceptions.Return;
+import dev.lytix.lox.exceptions.RuntimeError;
+import dev.lytix.lox.natives.ClockNative;
+import dev.lytix.lox.natives.FreadNative;
+
+import java.util.ArrayList;
 import java.util.List;
 
 import static dev.lytix.lox.TokenType.*;
 
 public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
-    private Environment environment = new Environment();
+    final Environment globals = new Environment();
+    private Environment environment = globals;
     boolean REPL = false;
 
     public Interpreter(boolean REPL) {
         this.REPL = REPL;
+
+        /* adds the language native functions to the global scope */
+        includeNativeFunctions();
+    }
+
+    void includeNativeFunctions() {
+        /* add clock native */
+        globals.define("clock", new ClockNative());
+        /* add fread native */
+        globals.define("fread", new FreadNative());
     }
 
     void interpret(List<Stmt> statements) {
@@ -95,11 +112,41 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     @Override
+    public Object visitCallExpr(Expr.Call expr) {
+        Object callee = evaluate(expr.callee);
+
+        List<Object> arguments = new ArrayList<>();
+        for (Expr argument : expr.arguments)
+            arguments.add(evaluate(argument));
+
+        if (!(callee instanceof LoxCallable)) {
+            throw new RuntimeError(expr.paren,
+                    "Can only call functions and classes.");
+        }
+
+        LoxCallable function = (LoxCallable)callee;
+        if (arguments.size() != function.arity())
+            throw new RuntimeError(expr.paren, "Expected " +
+                    function.arity() + " arguments but got " +
+                    arguments.size() + ".");
+
+        return function.call(this, arguments);
+    }
+
+    @Override
     public Void visitExpressionStmt(Stmt.Expression stmt) {
         Object res = evaluate(stmt.expression);
-        if (REPL)
-            System.out.println(stringify(res));
+        //if (REPL)
+        //    System.out.println(stringify(res));
         /* java stupid */
+        return null;
+    }
+
+    @Override
+    public Void visitFunctionStmt(Stmt.Function stmt) {
+        LoxFunction function = new LoxFunction(stmt, environment);
+        /* add function to namespace */
+        environment.define(stmt.name.lexeme, function);
         return null;
     }
 
@@ -117,6 +164,24 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     public Void visitPrintStmt(Stmt.Print stmt) {
         Object value = evaluate(stmt.expression);
         System.out.println(stringify(value));
+        return null;
+    }
+
+    @Override
+    public Void visitReturnStmt(Stmt.Return stmt) {
+        Object value = null;
+        if (stmt.value != null)
+            value = evaluate(stmt.value);
+
+        /* stop interpreting function body and return*/
+        throw new Return(value);
+    }
+
+    @Override
+    public Void visitWhileStmt(Stmt.While stmt) {
+        while (isTruthy(evaluate(stmt.condition)))
+            execute(stmt.body);
+
         return null;
     }
 

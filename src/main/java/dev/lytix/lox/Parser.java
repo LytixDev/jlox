@@ -1,6 +1,7 @@
 package dev.lytix.lox;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static dev.lytix.lox.TokenType.*;
@@ -17,13 +18,31 @@ import static dev.lytix.lox.TokenType.*;
  *              | statement ;
  *
  * statement    -> exprStmt
+ *              |  forStmt
  *              |  ifStmt
- *              |  printStmt ;
- *              |  block
+ *              |  printStmt
+ *              |  returnStmt
+ *              |  whileStmt
+ *              |  block ;
+ *
+ * returnStmt   -> "return" expression? ";" ;
+ *
+ * forStmt      -> "for" "(" ( varDecl | exprStmt | ";" ) expression? ";" expression? ")" statement ;
+ *
+ * whileStmt    -> "while" "(" expression ")" statement ;
  *
  * ifStmt       -> "if" "(" expression ")" statement ( "else" statement )? ;
  *
  * block        -> "{" declaration* "}" ;
+ *
+ * declaration  -> funDecl
+ *              |  varDecl
+ *              |  varGoDecl
+ *              |  statement ;
+ *
+ * funDecl      -> "fun" function ;
+ * function     -> IDENTIFIER "(" parameters? ")" block ;
+ * parameters   -> IDENTIFIER ( "," IDENTIFIER )* ;
  *
  * varDecl      -> "var" IDENTIFIER ( "=" expression )? ";" ;
  * varGoDecl    -> IDENTIFIER ":=" expression ";" ;
@@ -44,7 +63,12 @@ import static dev.lytix.lox.TokenType.*;
  * term         -> factor ( ( "-" | "+" ) factor )* ;
  * factor       -> unary ( ( "/" | "*" ) unary )* ;
  * unary        -> ( "!" | "-") unary
- *              |  primary;
+ *              |  call;
+ *
+ * call         -> primary ( "(" arguments? ")" )* ;
+ * arguments    -> expression ( "," expression )* ;
+ *
+ *
  * primary      -> "true" | "false" | "nil"
  *              |  NUMBER | STRING
  *              |  "(" expression ")"
@@ -71,6 +95,9 @@ public class Parser {
 
     private Stmt declaration() {
         try {
+            if (match(FUN))
+                return function("function");
+
             if (match(VAR))
                 return varDeclaration();
 
@@ -90,16 +117,77 @@ public class Parser {
     private Stmt statement() {
         /*
          * statement    -> exprStmt
+         *              |  forStmt
          *              |  ifStmt
          *              |  printStmt
+         *              |  returnStmt
+         *              |  whileStmt
          *              |  block ;
          */
+        if (match(FOR)) return forStatement();
         if (match(IF)) return ifStatement();
         if (match(PRINT)) return printStatement();
+        if (match(RETURN)) return returnStatement();
+        if (match(WHILE)) return whileStatement();
 
         if (match(LEFT_BRACE)) return new Stmt.Block(block());
 
         return expressionStatement();
+    }
+
+    private Stmt forStatement() {
+        /* forStmt      -> "for" "(" ( varDecl | exprStmt | ";" ) expression? ";" expression? ")" statement ; */
+
+        consume(LEFT_PAREN, "Expect '(' after 'for'.");
+
+        Stmt initializer;
+        if (match(SEMICOLON))
+            /* initializer has been omitted */
+            initializer = null;
+        else if (match(VAR))
+            initializer = varDeclaration();
+        else
+            /* wrap expr in stmt */
+            initializer = expressionStatement();
+
+        Expr condition = null;
+        if (!check(SEMICOLON))
+            condition = expression();
+        consume(SEMICOLON, "Expect ';' after loop condition.");
+
+        Expr increment = null;
+        if (!check(RIGHT_PAREN))
+            increment = expression();
+        consume(RIGHT_PAREN, "Expect ')' after for clauses.");
+
+        Stmt body = statement();
+
+        /* desugar for loop syntax sugar into a while loop in the AST */
+        if (increment != null)
+            body = new Stmt.Block(Arrays.asList(body,
+                   new Stmt.Expression(increment)));
+
+        /* if condition is omitted, fall back to 'true' */
+        if (condition == null)
+            condition = new Expr.Literal(true);
+
+        body = new Stmt.While(condition, body);
+
+        if (initializer != null)
+            body = new Stmt.Block(Arrays.asList(initializer, body));
+
+        return body;
+    }
+
+    private Stmt whileStatement() {
+        /* whileStmt    -> "while" "(" expression ")" statement ; */
+        consume(LEFT_PAREN, "Expect '(' after 'while'");
+        Expr condition = expression();
+        consume(RIGHT_PAREN, "Expect ')' after while condition");
+
+        Stmt body = statement();
+
+        return new Stmt.While(condition, body);
     }
 
     private Stmt ifStatement() {
@@ -125,6 +213,30 @@ public class Parser {
 
         consume(RIGHT_BRACE, "Expected '}' after block.");
         return statements;
+    }
+
+
+    private Stmt.Function function(String kind) {
+        /* function     -> IDENTIFIER "(" parameters? ")" block ; */
+        Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
+        consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
+        List<Token> parameters = new ArrayList<>();
+
+        /* handle zero parameter case */
+        if (!check(RIGHT_PAREN)) {
+            do {
+                if (parameters.size() >= 255)
+                    error(peek(), "Can't have more than 255 parameters.");
+
+                parameters.add(consume(IDENTIFIER, "Expect parameter name."));
+            } while (match(COMMA));
+        }
+        consume(RIGHT_PAREN, "Expect ')' after parameters.");
+
+        /* block() assumes the brace token has already been matched */
+        consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
+        List<Stmt> body = block();
+        return new Stmt.Function(name, parameters, body);
     }
 
     private Stmt varDeclaration() {
@@ -169,6 +281,17 @@ public class Parser {
         Expr value = expression();
         consume(SEMICOLON, "Expect ';' after value.");
         return new Stmt.Print(value);
+    }
+
+    private Stmt returnStatement() {
+        Token keyword = previous();
+        Expr value = null;
+        /* can use return keyword without an expression */
+        if (!check(SEMICOLON))
+            value = expression();
+
+        consume(SEMICOLON, "Expect ';' after return value.");
+        return new Stmt.Return(keyword, value);
     }
 
     private Expr expression() {
@@ -283,14 +406,48 @@ public class Parser {
 
     private Expr unary() {
         /* unary        -> ( "!" | "-") unary
-                        |  primary; */
+                        |  call; */
         if (match(BANG, MINUS)) {
             Token operator = previous();
             Expr right = unary();
             return new Expr.Unary(operator, right);
         }
 
-        return primary();
+        return call();
+    }
+
+    private Expr finishCall(Expr callee) {
+        List<Expr> arguments = new ArrayList<>();
+
+        /* function calls can have no argument, so only parse arguments when no right paren */
+        if (!check(RIGHT_PAREN)) {
+            do {
+                /* a function can't accept no more than 255 arguments */
+                if (arguments.size() > 255)
+                    /* do not throw error, keep parsing */
+                    error(peek(), "Can't have more than 255 arguments to a function.");
+
+                arguments.add(expression());
+            } while (match(COMMA));
+        }
+
+        Token paren = consume(RIGHT_PAREN, "Expect ')' after function arguments.");
+        return new Expr.Call(callee, paren, arguments);
+    }
+
+    private Expr call() {
+        /* call         -> primary ( "(" arguments? ")" )* ; */
+        Expr expr = primary();
+
+        while (true) {
+            if (match(LEFT_PAREN))
+                /* use previously parsed expression as callee, recursively */
+                expr = finishCall(expr);
+            else
+                break;
+        }
+
+        return expr;
     }
 
     private Expr primary() {

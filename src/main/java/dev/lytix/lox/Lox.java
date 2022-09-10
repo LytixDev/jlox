@@ -1,5 +1,7 @@
 package dev.lytix.lox;
 
+import dev.lytix.lox.exceptions.RuntimeError;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -80,8 +82,12 @@ public class Lox {
     }
 
     static void runtimeError(RuntimeError error) {
-        System.err.println(error.getMessage() +
-                "\n[Line " + error.token.line + "]");
+        if (error.token != null) {
+            System.err.println(error.getMessage() +
+                    "\n[Line " + error.token.line + "]");
+        } else {
+            System.err.println(error.getMessage() + "\n");
+        }
         hadRuntimeError = true;
     }
 

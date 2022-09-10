@@ -1,5 +1,7 @@
 package dev.lytix.lox;
 
+import dev.lytix.lox.exceptions.RuntimeError;
+
 import java.util.HashMap;
 import java.util.Map;
 
