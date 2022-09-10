@@ -1,5 +1,7 @@
 package dev.lytix.lox;
 
+import dev.lytix.lox.exceptions.Return;
+import dev.lytix.lox.exceptions.RuntimeError;
 import dev.lytix.lox.natives.ClockNative;
 import dev.lytix.lox.natives.FreadNative;
 
@@ -142,7 +144,7 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visitFunctionStmt(Stmt.Function stmt) {
-        LoxFunction function = new LoxFunction(stmt);
+        LoxFunction function = new LoxFunction(stmt, environment);
         /* add function to namespace */
         environment.define(stmt.name.lexeme, function);
         return null;
@@ -163,6 +165,16 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         Object value = evaluate(stmt.expression);
         System.out.println(stringify(value));
         return null;
+    }
+
+    @Override
+    public Void visitReturnStmt(Stmt.Return stmt) {
+        Object value = null;
+        if (stmt.value != null)
+            value = evaluate(stmt.value);
+
+        /* stop interpreting function body and return*/
+        throw new Return(value);
     }
 
     @Override

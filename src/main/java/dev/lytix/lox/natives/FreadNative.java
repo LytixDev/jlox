@@ -2,10 +2,9 @@ package dev.lytix.lox.natives;
 
 import dev.lytix.lox.Interpreter;
 import dev.lytix.lox.LoxCallable;
-import dev.lytix.lox.RuntimeError;
+import dev.lytix.lox.exceptions.RuntimeError;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
